@@ -328,6 +328,7 @@
         .waveform-canvas, .spectrogram-canvas {
             width: 100%;
             height: 100%;
+            cursor: crosshair;
         }
 
         .vis-panel {
@@ -376,6 +377,17 @@
         .timeline-marker:hover::before {
             background: var(--danger);
             transform: scale(1.3);
+        }
+
+        .timeline-marker.selected {
+            background: var(--accent);
+            z-index: 10;
+        }
+
+        .timeline-marker.selected::before {
+            background: var(--accent);
+            transform: scale(1.4);
+            box-shadow: 0 0 10px var(--accent);
         }
 
         .timeline-marker .tooltip {
@@ -458,6 +470,12 @@
         .edit-point-item:hover {
             background: var(--bg-primary);
             transform: translateX(5px);
+        }
+
+        .edit-point-item.selected {
+            background: var(--bg-primary);
+            border: 2px solid var(--accent);
+            box-shadow: 0 0 15px rgba(0, 212, 255, 0.3);
         }
 
         .edit-point-time {
@@ -822,6 +840,39 @@
                     audioPlayer.currentTime = ratio * analysisResults.duration;
                 }
             });
+
+            // Waveform/spectrogram canvas click - select nearest edit point
+            const waveformCanvas = document.getElementById('waveform-canvas');
+            const spectrogramCanvas = document.getElementById('spectrogram-canvas');
+
+            function handleCanvasClick(e) {
+                if (!analysisResults || analysisResults.editPoints.length === 0) return;
+
+                const canvas = e.target;
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const clickTime = (x / rect.width) * analysisResults.duration;
+
+                // Find nearest edit point within threshold (0.5 seconds or 5% of duration)
+                const threshold = Math.max(0.5, analysisResults.duration * 0.05);
+                let nearestIndex = -1;
+                let nearestDistance = Infinity;
+
+                analysisResults.editPoints.forEach((ep, index) => {
+                    const distance = Math.abs(ep.timestamp - clickTime);
+                    if (distance < threshold && distance < nearestDistance) {
+                        nearestDistance = distance;
+                        nearestIndex = index;
+                    }
+                });
+
+                if (nearestIndex >= 0) {
+                    selectEditPoint(nearestIndex);
+                }
+            }
+
+            waveformCanvas.addEventListener('click', handleCanvasClick);
+            spectrogramCanvas.addEventListener('click', handleCanvasClick);
         }
 
         function handleFileSelect(file) {
@@ -935,10 +986,21 @@
             ctx.stroke();
 
             // Draw edit point markers
-            ctx.fillStyle = 'rgba(255, 107, 53, 0.3)';
-            analysisResults.editPoints.forEach(ep => {
+            analysisResults.editPoints.forEach((ep, index) => {
                 const x = (ep.timestamp / analysisResults.duration) * width;
-                ctx.fillRect(x - 2, 0, 4, height);
+                const isSelected = index === currentEditIndex;
+
+                if (isSelected) {
+                    // Selected marker - cyan/accent color with glow
+                    ctx.fillStyle = 'rgba(0, 212, 255, 0.5)';
+                    ctx.fillRect(x - 4, 0, 8, height);
+                    ctx.fillStyle = 'rgba(0, 212, 255, 0.8)';
+                    ctx.fillRect(x - 2, 0, 4, height);
+                } else {
+                    // Unselected marker - orange
+                    ctx.fillStyle = 'rgba(255, 107, 53, 0.3)';
+                    ctx.fillRect(x - 2, 0, 4, height);
+                }
             });
         }
 
@@ -1009,10 +1071,21 @@
             ctx.drawImage(offscreen, 0, 0, width, height);
 
             // Draw edit point markers
-            ctx.fillStyle = 'rgba(255, 51, 102, 0.7)';
-            analysisResults.editPoints.forEach(ep => {
+            analysisResults.editPoints.forEach((ep, index) => {
                 const x = (ep.timestamp / analysisResults.duration) * width;
-                ctx.fillRect(x - 1, 0, 2, height);
+                const isSelected = index === currentEditIndex;
+
+                if (isSelected) {
+                    // Selected marker - cyan/accent color with glow
+                    ctx.fillStyle = 'rgba(0, 212, 255, 0.6)';
+                    ctx.fillRect(x - 3, 0, 6, height);
+                    ctx.fillStyle = 'rgba(0, 212, 255, 1)';
+                    ctx.fillRect(x - 1, 0, 2, height);
+                } else {
+                    // Unselected marker - pink/red
+                    ctx.fillStyle = 'rgba(255, 51, 102, 0.7)';
+                    ctx.fillRect(x - 1, 0, 2, height);
+                }
             });
         }
 
@@ -1065,8 +1138,7 @@
 
                 marker.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    audioPlayer.currentTime = ep.timestamp;
-                    currentEditIndex = index;
+                    selectEditPoint(index);
                 });
 
                 timeline.appendChild(marker);
@@ -1118,8 +1190,7 @@
             `;
 
             item.addEventListener('click', () => {
-                audioPlayer.currentTime = ep.timestamp;
-                currentEditIndex = index;
+                selectEditPoint(index);
             });
 
             return item;
@@ -1170,6 +1241,40 @@
             // Could add a playhead indicator on the waveform/spectrogram
         }
 
+        function selectEditPoint(index, seekAudio = true) {
+            currentEditIndex = index;
+
+            // Update timeline markers
+            document.querySelectorAll('.timeline-marker').forEach((marker, i) => {
+                marker.classList.toggle('selected', i === index);
+            });
+
+            // Update edit point list items
+            document.querySelectorAll('.edit-point-item').forEach((item) => {
+                const itemIndex = parseInt(item.dataset.index, 10);
+                item.classList.toggle('selected', itemIndex === index);
+            });
+
+            // Scroll selected item into view
+            const selectedItem = document.querySelector('.edit-point-item.selected');
+            if (selectedItem) {
+                selectedItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+
+            // Seek audio to edit point
+            if (seekAudio && index >= 0 && analysisResults && analysisResults.editPoints[index]) {
+                audioPlayer.currentTime = analysisResults.editPoints[index].timestamp;
+            }
+
+            // Redraw visualizations to show selected marker
+            const spectrogramPanel = document.getElementById('spectrogram-panel');
+            if (spectrogramPanel.classList.contains('active')) {
+                drawSpectrogram();
+            } else {
+                drawWaveform();
+            }
+        }
+
         function jumpToPreviousEdit() {
             if (!analysisResults || analysisResults.editPoints.length === 0) return;
 
@@ -1184,8 +1289,7 @@
             }
 
             if (prevIndex >= 0) {
-                audioPlayer.currentTime = analysisResults.editPoints[prevIndex].timestamp;
-                currentEditIndex = prevIndex;
+                selectEditPoint(prevIndex);
             }
         }
 
@@ -1203,8 +1307,7 @@
             }
 
             if (nextIndex >= 0) {
-                audioPlayer.currentTime = analysisResults.editPoints[nextIndex].timestamp;
-                currentEditIndex = nextIndex;
+                selectEditPoint(nextIndex);
             }
         }
 
