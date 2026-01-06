@@ -891,6 +891,24 @@
         const timeline = document.getElementById('timeline');
         const editPointsList = document.getElementById('edit-points-list');
 
+        const methodPlotOrder = [
+            'waveform_discontinuity',
+            'zero_crossing_rate',
+            'spectral_flux',
+            'energy_discontinuity',
+            'phase_discontinuity',
+            'noise_floor'
+        ];
+
+        const methodPlotStyles = {
+            'waveform_discontinuity': { line: '#00d4ff' },
+            'zero_crossing_rate': { line: '#00ff88' },
+            'spectral_flux': { line: '#ff6b35' },
+            'energy_discontinuity': { line: '#00d4ff' },
+            'phase_discontinuity': { line: '#ff3366' },
+            'noise_floor': { line: '#ffaa00' }
+        };
+
         // Initialize
         document.addEventListener('DOMContentLoaded', init);
 
@@ -1076,6 +1094,54 @@
             displayEditPoints();
         }
 
+        function getActiveMethodsForSelection() {
+            if (currentEditIndex < 0 || !analysisResults || !analysisResults.editPoints[currentEditIndex]) {
+                return null;
+            }
+
+            const editMethod = analysisResults.editPoints[currentEditIndex].method;
+            const methods = new Set();
+
+            if (editMethod.startsWith('combined(')) {
+                const inner = editMethod.slice(9, -1);
+                inner.split(',').forEach((method) => {
+                    const trimmed = method.trim();
+                    if (trimmed) {
+                        methods.add(trimmed);
+                    }
+                });
+            } else {
+                methods.add(editMethod);
+            }
+
+            return methods;
+        }
+
+        function getMethodPlotTitle(method) {
+            if (detectionMethods[method]) {
+                return detectionMethods[method].title
+                    .replace(' Detection', '')
+                    .replace(' Analysis', '');
+            }
+            return formatMethod(method);
+        }
+
+        function getMethodColor(method, alpha) {
+            const style = methodPlotStyles[method] || { line: '#00d4ff' };
+            return hexToRgba(style.line, alpha);
+        }
+
+        function hexToRgba(hex, alpha) {
+            const clean = hex.replace('#', '');
+            if (clean.length !== 6) {
+                return `rgba(0, 212, 255, ${alpha})`;
+            }
+            const r = parseInt(clean.slice(0, 2), 16);
+            const g = parseInt(clean.slice(2, 4), 16);
+            const b = parseInt(clean.slice(4, 6), 16);
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+
         function drawWaveform() {
             const canvas = document.getElementById('waveform-canvas');
             const ctx = canvas.getContext('2d');
@@ -1125,6 +1191,8 @@
             }
             ctx.stroke();
 
+            drawMethodOverlays(ctx, width, height);
+
             // Draw edit point markers
             analysisResults.editPoints.forEach((ep, index) => {
                 const x = (ep.timestamp / analysisResults.duration) * width;
@@ -1141,6 +1209,65 @@
                     ctx.fillStyle = 'rgba(255, 107, 53, 0.3)';
                     ctx.fillRect(x - 2, 0, 4, height);
                 }
+            });
+        }
+
+        function drawMethodOverlays(ctx, width, height) {
+            if (!analysisResults || !analysisResults.methodPlots) return;
+
+            const activeMethods = getActiveMethodsForSelection();
+            if (!activeMethods) return;
+
+            const padding = 12;
+            const plotWidth = width - padding * 2;
+            const plotHeight = height - padding * 2;
+            let legendIndex = 0;
+
+            methodPlotOrder.forEach((method) => {
+                if (!activeMethods.has(method)) return;
+                const plotData = analysisResults.methodPlots[method];
+                if (!plotData || !plotData.values || !plotData.times) return;
+
+                const values = plotData.values;
+                const times = plotData.times;
+                if (!values.length || !times.length) return;
+
+                let minVal = Infinity;
+                let maxVal = -Infinity;
+                for (let i = 0; i < values.length; i++) {
+                    const v = values[i];
+                    if (Number.isFinite(v)) {
+                        minVal = Math.min(minVal, v);
+                        maxVal = Math.max(maxVal, v);
+                    }
+                }
+                if (!Number.isFinite(minVal) || !Number.isFinite(maxVal) || maxVal === minVal) {
+                    minVal = 0;
+                    maxVal = 1;
+                }
+
+                ctx.strokeStyle = getMethodColor(method, 0.55);
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+
+                for (let i = 0; i < values.length; i++) {
+                    const x = padding + (times[i] / analysisResults.duration) * plotWidth;
+                    const normalized = (values[i] - minVal) / (maxVal - minVal);
+                    const y = height - padding - normalized * plotHeight;
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.stroke();
+
+                const label = getMethodPlotTitle(method);
+                ctx.fillStyle = getMethodColor(method, 0.9);
+                ctx.font = '11px sans-serif';
+                ctx.textAlign = 'left';
+                ctx.fillText(label, padding, 14 + legendIndex * 14);
+                legendIndex += 1;
             });
         }
 

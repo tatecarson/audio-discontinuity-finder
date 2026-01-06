@@ -33,6 +33,13 @@ def allowed_file(filename):
 
 def analysis_result_to_dict(result: AnalysisResult) -> dict:
     """Convert AnalysisResult to JSON-serializable dict."""
+    method_plots = {}
+    for method, plot in result.method_plots.items():
+        method_plots[method] = {
+            'times': plot['times'].tolist(),
+            'values': plot['values'].tolist()
+        }
+
     return {
         'duration': result.duration,
         'sampleRate': result.sample_rate,
@@ -51,7 +58,8 @@ def analysis_result_to_dict(result: AnalysisResult) -> dict:
             'times': result.spectrogram_times.tolist() if result.spectrogram_times is not None else None,
             'freqs': result.spectrogram_freqs.tolist() if result.spectrogram_freqs is not None else None
         },
-        'metadata': result.analysis_metadata
+        'metadata': result.analysis_metadata,
+        'methodPlots': method_plots
     }
 
 

@@ -34,6 +34,7 @@ class AnalysisResult:
     spectrogram_times: Optional[np.ndarray]
     spectrogram_freqs: Optional[np.ndarray]
     analysis_metadata: dict
+    method_plots: dict
 
 
 class AudioForensicsAnalyzer:
@@ -74,14 +75,32 @@ class AudioForensicsAnalyzer:
 
         # Collect edit points from all detection methods
         all_edit_points = []
+        method_plots = {}
 
         # Run all detection algorithms
-        all_edit_points.extend(self._detect_waveform_discontinuities(y, sr))
-        all_edit_points.extend(self._detect_zcr_anomalies(y, sr))
-        all_edit_points.extend(self._detect_spectral_flux_anomalies(y, sr))
-        all_edit_points.extend(self._detect_energy_discontinuities(y, sr))
-        all_edit_points.extend(self._detect_phase_discontinuities(y, sr))
-        all_edit_points.extend(self._detect_noise_floor_changes(y, sr))
+        waveform_points, waveform_plot = self._detect_waveform_discontinuities(y, sr)
+        all_edit_points.extend(waveform_points)
+        method_plots['waveform_discontinuity'] = waveform_plot
+
+        zcr_points, zcr_plot = self._detect_zcr_anomalies(y, sr)
+        all_edit_points.extend(zcr_points)
+        method_plots['zero_crossing_rate'] = zcr_plot
+
+        flux_points, flux_plot = self._detect_spectral_flux_anomalies(y, sr)
+        all_edit_points.extend(flux_points)
+        method_plots['spectral_flux'] = flux_plot
+
+        energy_points, energy_plot = self._detect_energy_discontinuities(y, sr)
+        all_edit_points.extend(energy_points)
+        method_plots['energy_discontinuity'] = energy_plot
+
+        phase_points, phase_plot = self._detect_phase_discontinuities(y, sr)
+        all_edit_points.extend(phase_points)
+        method_plots['phase_discontinuity'] = phase_plot
+
+        noise_points, noise_plot = self._detect_noise_floor_changes(y, sr)
+        all_edit_points.extend(noise_points)
+        method_plots['noise_floor'] = noise_plot
 
         # Merge nearby detections and boost confidence for multiple method agreements
         merged_points = self._merge_nearby_detections(all_edit_points)
@@ -114,10 +133,11 @@ class AudioForensicsAnalyzer:
                     'phase_coherence',
                     'noise_floor'
                 ]
-            }
+            },
+            method_plots=method_plots
         )
 
-    def _detect_waveform_discontinuities(self, y: np.ndarray, sr: int) -> List[EditPoint]:
+    def _detect_waveform_discontinuities(self, y: np.ndarray, sr: int) -> Tuple[List[EditPoint], dict]:
         """
         Detect sudden jumps in the waveform that indicate hard cuts.
         """
@@ -152,9 +172,15 @@ class AudioForensicsAnalyzer:
                         description='Sudden amplitude jump detected'
                     ))
 
-        return edit_points
+        plot_values, plot_times = self._prepare_plot_series(diff, sr)
+        plot_data = {
+            'times': plot_times,
+            'values': plot_values
+        }
 
-    def _detect_zcr_anomalies(self, y: np.ndarray, sr: int) -> List[EditPoint]:
+        return edit_points, plot_data
+
+    def _detect_zcr_anomalies(self, y: np.ndarray, sr: int) -> Tuple[List[EditPoint], dict]:
         """
         Detect anomalies in zero-crossing rate which indicate unnatural transitions.
         """
@@ -188,9 +214,15 @@ class AudioForensicsAnalyzer:
                     description='Abnormal zero-crossing rate transition'
                 ))
 
-        return edit_points
+        plot_values, plot_times = self._prepare_plot_series(zcr_diff, sr, hop_length=hop_length)
+        plot_data = {
+            'times': plot_times,
+            'values': plot_values
+        }
 
-    def _detect_spectral_flux_anomalies(self, y: np.ndarray, sr: int) -> List[EditPoint]:
+        return edit_points, plot_data
+
+    def _detect_spectral_flux_anomalies(self, y: np.ndarray, sr: int) -> Tuple[List[EditPoint], dict]:
         """
         Detect sudden changes in spectral content using spectral flux.
         """
@@ -227,9 +259,15 @@ class AudioForensicsAnalyzer:
                     description='Sudden spectral content change'
                 ))
 
-        return edit_points
+        plot_values, plot_times = self._prepare_plot_series(flux, sr, hop_length=hop_length)
+        plot_data = {
+            'times': plot_times,
+            'values': plot_values
+        }
 
-    def _detect_energy_discontinuities(self, y: np.ndarray, sr: int) -> List[EditPoint]:
+        return edit_points, plot_data
+
+    def _detect_energy_discontinuities(self, y: np.ndarray, sr: int) -> Tuple[List[EditPoint], dict]:
         """
         Detect sudden changes in short-time energy (volume jumps).
         """
@@ -264,9 +302,15 @@ class AudioForensicsAnalyzer:
                     description=f'Sudden energy change ({energy_diff[jump]:.1f} dB)'
                 ))
 
-        return edit_points
+        plot_values, plot_times = self._prepare_plot_series(energy_diff, sr, hop_length=hop_length)
+        plot_data = {
+            'times': plot_times,
+            'values': plot_values
+        }
 
-    def _detect_phase_discontinuities(self, y: np.ndarray, sr: int) -> List[EditPoint]:
+        return edit_points, plot_data
+
+    def _detect_phase_discontinuities(self, y: np.ndarray, sr: int) -> Tuple[List[EditPoint], dict]:
         """
         Detect phase discontinuities that often occur at edit points.
         """
@@ -311,9 +355,15 @@ class AudioForensicsAnalyzer:
                     description='Phase coherence anomaly detected'
                 ))
 
-        return edit_points
+        plot_values, plot_times = self._prepare_plot_series(phase_variance, sr, hop_length=hop_length)
+        plot_data = {
+            'times': plot_times,
+            'values': plot_values
+        }
 
-    def _detect_noise_floor_changes(self, y: np.ndarray, sr: int) -> List[EditPoint]:
+        return edit_points, plot_data
+
+    def _detect_noise_floor_changes(self, y: np.ndarray, sr: int) -> Tuple[List[EditPoint], dict]:
         """
         Detect changes in background noise floor that indicate different recording segments.
         """
@@ -357,7 +407,52 @@ class AudioForensicsAnalyzer:
                         description='Background noise level change'
                     ))
 
-        return edit_points
+        if len(noise_floors) > 1:
+            noise_diff = np.abs(np.diff(noise_floors))
+            times = (np.arange(len(noise_diff)) * hop) / sr
+        else:
+            noise_diff = np.array([])
+            times = np.array([])
+
+        plot_values, plot_times = self._prepare_plot_series(noise_diff, sr, times=times)
+        plot_data = {
+            'times': plot_times,
+            'values': plot_values
+        }
+
+        return edit_points, plot_data
+
+    def _prepare_plot_series(
+        self,
+        values: np.ndarray,
+        sr: int,
+        hop_length: Optional[int] = None,
+        times: Optional[np.ndarray] = None,
+        target_points: int = 1200
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Downsample a time series for plotting and return aligned times."""
+        values = np.asarray(values)
+        if times is None:
+            if hop_length is None:
+                times = np.arange(len(values)) / sr
+            else:
+                times = librosa.frames_to_time(
+                    np.arange(len(values)),
+                    sr=sr,
+                    hop_length=hop_length
+                )
+        else:
+            times = np.asarray(times)
+
+        if len(values) == 0:
+            return values, times
+
+        if len(values) > target_points:
+            idx = np.linspace(0, len(values) - 1, target_points).astype(int)
+            values = values[idx]
+            times = times[idx]
+
+        return values, times
 
     def _merge_nearby_detections(self, edit_points: List[EditPoint],
                                    time_threshold: float = 0.1) -> List[EditPoint]:
