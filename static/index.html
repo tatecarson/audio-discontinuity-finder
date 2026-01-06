@@ -333,6 +333,37 @@
             flex-wrap: wrap;
         }
 
+        .vis-zoom-controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            padding-left: 6px;
+            border-left: 1px solid var(--border);
+        }
+
+        .zoom-btn {
+            padding: 6px 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .zoom-btn:hover {
+            color: var(--text-primary);
+            border-color: var(--accent);
+        }
+
+        .zoom-level {
+            font-size: 0.85rem;
+            color: var(--accent);
+            min-width: 48px;
+            text-align: center;
+            font-weight: 600;
+        }
+
         .vis-opacity-group {
             display: flex;
             align-items: center;
@@ -871,6 +902,11 @@
                             <input type="range" id="spectrogram-opacity" min="0.1" max="1" step="0.05" value="0.85">
                             <span class="vis-opacity-value" id="spectrogram-opacity-value">0.85</span>
                         </label>
+                        <div class="vis-zoom-controls">
+                            <button class="zoom-btn" id="zoom-out">-</button>
+                            <span class="zoom-level" id="zoom-level">1.0x</span>
+                            <button class="zoom-btn" id="zoom-in">+</button>
+                        </div>
                     </div>
                 </div>
                 <div class="vis-content">
@@ -943,6 +979,9 @@
         const waveformOpacityValue = document.getElementById('waveform-opacity-value');
         const spectrogramOpacitySlider = document.getElementById('spectrogram-opacity');
         const spectrogramOpacityValue = document.getElementById('spectrogram-opacity-value');
+        const zoomOutBtn = document.getElementById('zoom-out');
+        const zoomInBtn = document.getElementById('zoom-in');
+        const zoomLevelLabel = document.getElementById('zoom-level');
 
         const methodPlotOrder = [
             'waveform_discontinuity',
@@ -964,6 +1003,8 @@
 
         let waveformOpacity = 0.9;
         let spectrogramOpacity = 0.85;
+        let zoomFactor = 1;
+        let zoomCenterTime = 0;
 
         // Initialize
         document.addEventListener('DOMContentLoaded', init);
@@ -1025,6 +1066,9 @@
 
             analyzeBtn.addEventListener('click', analyzeAudio);
 
+            zoomInBtn.addEventListener('click', () => adjustZoom(1.5));
+            zoomOutBtn.addEventListener('click', () => adjustZoom(1 / 1.5));
+
             // Tab switching
             document.querySelectorAll('.vis-tab').forEach(tab => {
                 tab.addEventListener('click', () => {
@@ -1084,7 +1128,8 @@
                 const canvas = e.target;
                 const rect = canvas.getBoundingClientRect();
                 const x = e.clientX - rect.left;
-                const clickTime = (x / rect.width) * analysisResults.duration;
+                const zoomWindow = getZoomWindow();
+                const clickTime = zoomWindow.start + (x / rect.width) * (zoomWindow.end - zoomWindow.start);
 
                 // Find nearest edit point within threshold (0.5 seconds or 5% of duration)
                 const threshold = Math.max(0.5, analysisResults.duration * 0.05);
@@ -1159,6 +1204,8 @@
             document.getElementById('duration').textContent = formatTime(analysisResults.duration);
             document.getElementById('sample-rate').textContent = `${(analysisResults.sampleRate / 1000).toFixed(1)}kHz`;
 
+            resetZoom();
+
             // Draw waveform (spectrogram drawn when tab is clicked)
             drawWaveform();
 
@@ -1217,6 +1264,61 @@
             return `rgba(${r}, ${g}, ${b}, ${alpha})`;
         }
 
+        function resetZoom() {
+            zoomFactor = 1;
+            zoomCenterTime = analysisResults ? analysisResults.duration / 2 : 0;
+            updateZoomLabel();
+        }
+
+        function adjustZoom(multiplier) {
+            if (!analysisResults) return;
+            const newZoom = Math.min(10, Math.max(1, zoomFactor * multiplier));
+            if (newZoom === zoomFactor) return;
+            zoomFactor = newZoom;
+            updateZoomLabel();
+            redrawActiveVisualization();
+        }
+
+        function updateZoomLabel() {
+            zoomLevelLabel.textContent = `${zoomFactor.toFixed(1)}x`;
+            zoomOutBtn.disabled = zoomFactor <= 1.01;
+        }
+
+        function setZoomCenter(time) {
+            if (!analysisResults) return;
+            zoomCenterTime = Math.min(analysisResults.duration, Math.max(0, time));
+        }
+
+        function getZoomWindow() {
+            if (!analysisResults || zoomFactor <= 1) {
+                return { start: 0, end: analysisResults ? analysisResults.duration : 0 };
+            }
+
+            const windowDuration = analysisResults.duration / zoomFactor;
+            let start = zoomCenterTime - windowDuration / 2;
+            let end = zoomCenterTime + windowDuration / 2;
+
+            if (start < 0) {
+                end -= start;
+                start = 0;
+            }
+            if (end > analysisResults.duration) {
+                start -= end - analysisResults.duration;
+                end = analysisResults.duration;
+            }
+
+            return { start, end };
+        }
+
+        function redrawActiveVisualization() {
+            const spectrogramPanel = document.getElementById('spectrogram-panel');
+            if (spectrogramPanel.classList.contains('active')) {
+                drawSpectrogram();
+            } else {
+                drawWaveform();
+            }
+        }
+
         function drawWaveform() {
             const canvas = document.getElementById('waveform-canvas');
             const ctx = canvas.getContext('2d');
@@ -1234,6 +1336,8 @@
             const height = rect.height;
             const waveform = analysisResults.waveform;
             const centerY = height / 2;
+            const zoomWindow = getZoomWindow();
+            const windowDuration = zoomWindow.end - zoomWindow.start;
 
             // Clear canvas
             ctx.fillStyle = '#0f0f0f';
@@ -1254,10 +1358,13 @@
             ctx.lineWidth = 1;
             ctx.beginPath();
 
-            const step = waveform.length / width;
+            const startIndex = Math.floor((zoomWindow.start / analysisResults.duration) * waveform.length);
+            const endIndex = Math.max(startIndex + 1, Math.floor((zoomWindow.end / analysisResults.duration) * waveform.length));
+            const segment = waveform.slice(startIndex, endIndex);
+            const step = segment.length / width;
             for (let i = 0; i < width; i++) {
                 const dataIndex = Math.floor(i * step);
-                const value = waveform[dataIndex] || 0;
+                const value = segment[dataIndex] || 0;
                 const y = centerY - (value * centerY * 0.9);
 
                 if (i === 0) {
@@ -1273,7 +1380,8 @@
 
             // Draw edit point markers
             analysisResults.editPoints.forEach((ep, index) => {
-                const x = (ep.timestamp / analysisResults.duration) * width;
+                if (ep.timestamp < zoomWindow.start || ep.timestamp > zoomWindow.end) return;
+                const x = ((ep.timestamp - zoomWindow.start) / windowDuration) * width;
                 const isSelected = index === currentEditIndex;
 
                 if (isSelected) {
@@ -1296,6 +1404,8 @@
             const activeMethods = getActiveMethodsForSelection();
             if (!activeMethods) return;
 
+            const zoomWindow = getZoomWindow();
+            const windowDuration = zoomWindow.end - zoomWindow.start;
             const padding = 12;
             const plotWidth = width - padding * 2;
             const plotHeight = height - padding * 2;
@@ -1328,24 +1438,32 @@
                 ctx.lineWidth = 1.5;
                 ctx.beginPath();
 
+                let started = false;
                 for (let i = 0; i < values.length; i++) {
-                    const x = padding + (times[i] / analysisResults.duration) * plotWidth;
+                    const time = times[i];
+                    if (time < zoomWindow.start || time > zoomWindow.end) continue;
+                    const x = padding + ((time - zoomWindow.start) / windowDuration) * plotWidth;
                     const normalized = (values[i] - minVal) / (maxVal - minVal);
                     const y = height - padding - normalized * plotHeight;
-                    if (i === 0) {
+                    if (!started) {
                         ctx.moveTo(x, y);
+                        started = true;
                     } else {
                         ctx.lineTo(x, y);
                     }
                 }
-                ctx.stroke();
+                if (started) {
+                    ctx.stroke();
+                }
 
-                const label = getMethodPlotTitle(method);
-                ctx.fillStyle = getMethodColor(method, 0.9);
-                ctx.font = '11px sans-serif';
-                ctx.textAlign = 'left';
-                ctx.fillText(label, padding, 14 + legendIndex * 14);
-                legendIndex += 1;
+                if (started) {
+                    const label = getMethodPlotTitle(method);
+                    ctx.fillStyle = getMethodColor(method, 0.9);
+                    ctx.font = '11px sans-serif';
+                    ctx.textAlign = 'left';
+                    ctx.fillText(label, padding, 14 + legendIndex * 14);
+                    legendIndex += 1;
+                }
             });
         }
 
@@ -1373,6 +1491,8 @@
             const specData = analysisResults.spectrogram.data;
             const numFreqs = specData.length;
             const numTimes = specData[0].length;
+            const zoomWindow = getZoomWindow();
+            const windowDuration = zoomWindow.end - zoomWindow.start;
 
             // Create an offscreen canvas for the spectrogram image
             const imageData = ctx.createImageData(numTimes, numFreqs);
@@ -1415,14 +1535,18 @@
             ctx.imageSmoothingEnabled = false;
             ctx.save();
             ctx.globalAlpha = spectrogramOpacity;
-            ctx.drawImage(offscreen, 0, 0, width, height);
+            const startIndex = Math.max(0, Math.floor((zoomWindow.start / analysisResults.duration) * numTimes));
+            const endIndex = Math.min(numTimes, Math.ceil((zoomWindow.end / analysisResults.duration) * numTimes));
+            const windowTimes = Math.max(1, endIndex - startIndex);
+            ctx.drawImage(offscreen, startIndex, 0, windowTimes, numFreqs, 0, 0, width, height);
             ctx.restore();
 
             drawMethodOverlays(ctx, width, height);
 
             // Draw edit point markers
             analysisResults.editPoints.forEach((ep, index) => {
-                const x = (ep.timestamp / analysisResults.duration) * width;
+                if (ep.timestamp < zoomWindow.start || ep.timestamp > zoomWindow.end) return;
+                const x = ((ep.timestamp - zoomWindow.start) / windowDuration) * width;
                 const isSelected = index === currentEditIndex;
 
                 if (isSelected) {
@@ -1627,13 +1751,12 @@
                 audioPlayer.currentTime = analysisResults.editPoints[index].timestamp;
             }
 
-            // Redraw visualizations to show selected marker
-            const spectrogramPanel = document.getElementById('spectrogram-panel');
-            if (spectrogramPanel.classList.contains('active')) {
-                drawSpectrogram();
-            } else {
-                drawWaveform();
+            if (index >= 0 && analysisResults && analysisResults.editPoints[index]) {
+                setZoomCenter(analysisResults.editPoints[index].timestamp);
             }
+
+            // Redraw visualizations to show selected marker
+            redrawActiveVisualization();
         }
 
         function jumpToPreviousEdit() {
@@ -1675,12 +1798,7 @@
         // Handle window resize - only redraw the visible panel
         window.addEventListener('resize', () => {
             if (analysisResults) {
-                const spectrogramPanel = document.getElementById('spectrogram-panel');
-                if (spectrogramPanel.classList.contains('active')) {
-                    drawSpectrogram();
-                } else {
-                    drawWaveform();
-                }
+                redrawActiveVisualization();
             }
         });
 
