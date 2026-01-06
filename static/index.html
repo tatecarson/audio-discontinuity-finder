@@ -959,35 +959,49 @@
             const numFreqs = specData.length;
             const numTimes = specData[0].length;
 
-            // Find min/max for normalization
+            // Create an offscreen canvas for the spectrogram image
+            const imageData = ctx.createImageData(numTimes, numFreqs);
+            const data = imageData.data;
+
+            // Find min/max for normalization (spectrogram is in dB, typically -80 to 0)
             let minVal = Infinity, maxVal = -Infinity;
             for (let f = 0; f < numFreqs; f++) {
                 for (let t = 0; t < numTimes; t++) {
-                    minVal = Math.min(minVal, specData[f][t]);
-                    maxVal = Math.max(maxVal, specData[f][t]);
+                    const val = specData[f][t];
+                    if (isFinite(val)) {
+                        minVal = Math.min(minVal, val);
+                        maxVal = Math.max(maxVal, val);
+                    }
                 }
             }
 
-            // Draw spectrogram
-            const xStep = width / numTimes;
-            const yStep = height / numFreqs;
-
-            for (let t = 0; t < numTimes; t++) {
-                for (let f = 0; f < numFreqs; f++) {
-                    const value = (specData[f][t] - minVal) / (maxVal - minVal);
+            // Build image data (flip vertically so low freqs at bottom)
+            for (let f = 0; f < numFreqs; f++) {
+                for (let t = 0; t < numTimes; t++) {
+                    const value = (specData[f][t] - minVal) / (maxVal - minVal + 1e-10);
                     const color = getSpectrogramColor(value);
-                    ctx.fillStyle = color;
-                    ctx.fillRect(
-                        t * xStep,
-                        height - (f + 1) * yStep,
-                        Math.ceil(xStep) + 1,
-                        Math.ceil(yStep) + 1
-                    );
+                    const flippedF = numFreqs - 1 - f;
+                    const idx = (flippedF * numTimes + t) * 4;
+                    data[idx] = color.r;
+                    data[idx + 1] = color.g;
+                    data[idx + 2] = color.b;
+                    data[idx + 3] = 255;
                 }
             }
+
+            // Draw to offscreen canvas then scale to main canvas
+            const offscreen = document.createElement('canvas');
+            offscreen.width = numTimes;
+            offscreen.height = numFreqs;
+            const offCtx = offscreen.getContext('2d');
+            offCtx.putImageData(imageData, 0, 0);
+
+            // Disable smoothing for crisp pixels
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(offscreen, 0, 0, width, height);
 
             // Draw edit point markers
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.fillStyle = 'rgba(255, 51, 102, 0.7)';
             analysisResults.editPoints.forEach(ep => {
                 const x = (ep.timestamp / analysisResults.duration) * width;
                 ctx.fillRect(x - 1, 0, 2, height);
@@ -995,11 +1009,33 @@
         }
 
         function getSpectrogramColor(value) {
-            // Viridis-like colormap
-            const r = Math.floor(68 + value * 187);
-            const g = Math.floor(1 + value * 180);
-            const b = Math.floor(84 + value * (130 - 84 * value));
-            return `rgb(${r}, ${g}, ${b})`;
+            // Magma colormap for better contrast
+            const v = Math.max(0, Math.min(1, value));
+            let r, g, b;
+
+            if (v < 0.25) {
+                const t = v / 0.25;
+                r = Math.floor(t * 50);
+                g = Math.floor(t * 20);
+                b = Math.floor(30 + t * 70);
+            } else if (v < 0.5) {
+                const t = (v - 0.25) / 0.25;
+                r = Math.floor(50 + t * 130);
+                g = Math.floor(20 + t * 20);
+                b = Math.floor(100 + t * 20);
+            } else if (v < 0.75) {
+                const t = (v - 0.5) / 0.25;
+                r = Math.floor(180 + t * 50);
+                g = Math.floor(40 + t * 80);
+                b = Math.floor(120 - t * 60);
+            } else {
+                const t = (v - 0.75) / 0.25;
+                r = Math.floor(230 + t * 25);
+                g = Math.floor(120 + t * 135);
+                b = Math.floor(60 + t * 100);
+            }
+
+            return { r, g, b };
         }
 
         function createTimelineMarkers() {
