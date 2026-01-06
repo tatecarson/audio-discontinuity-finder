@@ -615,6 +615,132 @@
                 height: 200px;
             }
         }
+
+        /* Detection Method Modal */
+        .method-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .method-modal-overlay.visible {
+            display: flex;
+        }
+
+        .method-modal {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            max-width: 700px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .method-modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .method-modal-header h3 {
+            font-size: 1.3rem;
+            color: var(--accent);
+        }
+
+        .method-modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 5px;
+            line-height: 1;
+            transition: color 0.2s;
+        }
+
+        .method-modal-close:hover {
+            color: var(--text-primary);
+        }
+
+        .method-modal-content {
+            padding: 24px;
+        }
+
+        .method-diagram {
+            background: var(--bg-primary);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .method-diagram svg {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .method-explanation h4 {
+            color: var(--text-primary);
+            margin-bottom: 12px;
+            font-size: 1.1rem;
+        }
+
+        .method-explanation p {
+            color: var(--text-secondary);
+            line-height: 1.7;
+            margin-bottom: 16px;
+        }
+
+        .method-explanation ul {
+            color: var(--text-secondary);
+            margin-left: 20px;
+            line-height: 1.8;
+        }
+
+        .method-explanation li {
+            margin-bottom: 8px;
+        }
+
+        .method-tag {
+            display: inline-block;
+            padding: 4px 10px;
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+            font-size: 0.8rem;
+            color: var(--accent);
+            margin-right: 8px;
+            margin-bottom: 8px;
+        }
+
+        .edit-point-info-btn {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text-secondary);
+            padding: 4px 8px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            margin-left: auto;
+            transition: all 0.2s;
+        }
+
+        .edit-point-info-btn:hover {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: var(--bg-primary);
+        }
     </style>
 </head>
 <body>
@@ -729,6 +855,20 @@
     <footer>
         <p>Audio Forensics Analyzer - Detect difficult-to-find edits in audio recordings</p>
     </footer>
+
+    <!-- Detection Method Modal -->
+    <div class="method-modal-overlay" id="method-modal-overlay">
+        <div class="method-modal">
+            <div class="method-modal-header">
+                <h3 id="method-modal-title">Detection Method</h3>
+                <button class="method-modal-close" id="method-modal-close">&times;</button>
+            </div>
+            <div class="method-modal-content">
+                <div class="method-diagram" id="method-diagram"></div>
+                <div class="method-explanation" id="method-explanation"></div>
+            </div>
+        </div>
+    </div>
 
     <script>
         // Global state
@@ -1187,10 +1327,21 @@
                     <div class="edit-point-method">${formatMethod(ep.method)}</div>
                     <div class="edit-point-desc">${ep.description}</div>
                 </div>
+                <button class="edit-point-info-btn" data-method="${ep.method}" title="Learn about this detection method">?</button>
             `;
 
-            item.addEventListener('click', () => {
-                selectEditPoint(index);
+            item.addEventListener('click', (e) => {
+                // Don't select if clicking the info button
+                if (!e.target.classList.contains('edit-point-info-btn')) {
+                    selectEditPoint(index);
+                }
+            });
+
+            // Add click handler for info button
+            const infoBtn = item.querySelector('.edit-point-info-btn');
+            infoBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                showMethodExplanation(ep.method);
             });
 
             return item;
@@ -1320,6 +1471,338 @@
                 } else {
                     drawWaveform();
                 }
+            }
+        });
+
+        // Detection method explanations and diagrams
+        const detectionMethods = {
+            'waveform_discontinuity': {
+                title: 'Waveform Discontinuity Detection',
+                diagram: `
+                    <svg width="400" height="150" viewBox="0 0 400 150">
+                        <defs>
+                            <linearGradient id="waveGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" style="stop-color:#00d4ff;stop-opacity:1" />
+                                <stop offset="100%" style="stop-color:#00ff88;stop-opacity:1" />
+                            </linearGradient>
+                        </defs>
+                        <!-- Background -->
+                        <rect width="400" height="150" fill="#0f0f0f" rx="8"/>
+                        <!-- Center line -->
+                        <line x1="0" y1="75" x2="400" y2="75" stroke="#333" stroke-width="1"/>
+                        <!-- Normal waveform before -->
+                        <path d="M 20 75 Q 40 45, 60 75 Q 80 105, 100 75 Q 120 45, 140 75 Q 160 105, 180 75"
+                              stroke="url(#waveGrad)" stroke-width="2" fill="none"/>
+                        <!-- Discontinuity marker -->
+                        <line x1="200" y1="10" x2="200" y2="140" stroke="#ff6b35" stroke-width="3"/>
+                        <circle cx="200" cy="75" r="6" fill="#ff6b35"/>
+                        <!-- Different waveform after -->
+                        <path d="M 220 75 Q 235 30, 250 75 Q 265 120, 280 75 Q 295 55, 310 75 Q 325 95, 340 75 Q 355 35, 370 75"
+                              stroke="url(#waveGrad)" stroke-width="2" fill="none"/>
+                        <!-- Labels -->
+                        <text x="100" y="140" fill="#a0a0a0" font-size="11" text-anchor="middle">Before Edit</text>
+                        <text x="200" y="140" fill="#ff6b35" font-size="11" text-anchor="middle">Jump</text>
+                        <text x="300" y="140" fill="#a0a0a0" font-size="11" text-anchor="middle">After Edit</text>
+                    </svg>
+                `,
+                explanation: `
+                    <h4>How It Works</h4>
+                    <p>This method detects sudden jumps in the audio waveform amplitude that don't follow natural audio patterns. When audio is cut and spliced, the sample values often don't align smoothly.</p>
+                    <h4>What It Detects</h4>
+                    <ul>
+                        <li>Hard cuts where audio abruptly changes</li>
+                        <li>Sample-level discontinuities at splice points</li>
+                        <li>Unnatural amplitude jumps between frames</li>
+                    </ul>
+                    <h4>Reliability</h4>
+                    <p>High reliability for amateur edits but can miss professional edits where crossfades are applied.</p>
+                `
+            },
+            'zero_crossing_rate': {
+                title: 'Zero-Crossing Rate Analysis',
+                diagram: `
+                    <svg width="400" height="150" viewBox="0 0 400 150">
+                        <rect width="400" height="150" fill="#0f0f0f" rx="8"/>
+                        <!-- Center line (zero line) -->
+                        <line x1="20" y1="75" x2="380" y2="75" stroke="#00d4ff" stroke-width="2"/>
+                        <text x="10" y="78" fill="#00d4ff" font-size="10">0</text>
+                        <!-- Low ZCR region (speech-like) -->
+                        <path d="M 30 75 Q 50 30, 70 75 Q 90 120, 110 75 Q 130 35, 150 75"
+                              stroke="#00ff88" stroke-width="2" fill="none"/>
+                        <!-- Crossing markers -->
+                        <circle cx="30" cy="75" r="3" fill="#00ff88"/>
+                        <circle cx="70" cy="75" r="3" fill="#00ff88"/>
+                        <circle cx="110" cy="75" r="3" fill="#00ff88"/>
+                        <circle cx="150" cy="75" r="3" fill="#00ff88"/>
+                        <!-- Edit point -->
+                        <line x1="180" y1="10" x2="180" y2="140" stroke="#ff6b35" stroke-width="2" stroke-dasharray="5,3"/>
+                        <!-- High ZCR region (noise-like) -->
+                        <path d="M 200 75 Q 210 55, 220 75 Q 230 95, 240 75 Q 250 60, 260 75 Q 270 90, 280 75 Q 290 65, 300 75 Q 310 85, 320 75 Q 330 70, 340 75 Q 350 80, 360 75"
+                              stroke="#ff3366" stroke-width="2" fill="none"/>
+                        <!-- Many crossing markers -->
+                        <circle cx="200" cy="75" r="2" fill="#ff3366"/>
+                        <circle cx="220" cy="75" r="2" fill="#ff3366"/>
+                        <circle cx="240" cy="75" r="2" fill="#ff3366"/>
+                        <circle cx="260" cy="75" r="2" fill="#ff3366"/>
+                        <circle cx="280" cy="75" r="2" fill="#ff3366"/>
+                        <circle cx="300" cy="75" r="2" fill="#ff3366"/>
+                        <circle cx="320" cy="75" r="2" fill="#ff3366"/>
+                        <circle cx="340" cy="75" r="2" fill="#ff3366"/>
+                        <circle cx="360" cy="75" r="2" fill="#ff3366"/>
+                        <!-- Labels -->
+                        <text x="90" y="140" fill="#00ff88" font-size="10" text-anchor="middle">Low ZCR</text>
+                        <text x="280" y="140" fill="#ff3366" font-size="10" text-anchor="middle">High ZCR</text>
+                    </svg>
+                `,
+                explanation: `
+                    <h4>How It Works</h4>
+                    <p>Zero-crossing rate (ZCR) measures how often the audio signal crosses the zero amplitude line. Different types of audio (speech, music, noise) have characteristic ZCR patterns.</p>
+                    <h4>What It Detects</h4>
+                    <ul>
+                        <li>Sudden changes in audio texture or character</li>
+                        <li>Transitions between different audio sources</li>
+                        <li>Unnatural frequency content changes</li>
+                    </ul>
+                    <h4>Reliability</h4>
+                    <p>Good for detecting splices between different recording environments or speakers.</p>
+                `
+            },
+            'spectral_flux': {
+                title: 'Spectral Flux Analysis',
+                diagram: `
+                    <svg width="400" height="150" viewBox="0 0 400 150">
+                        <rect width="400" height="150" fill="#0f0f0f" rx="8"/>
+                        <!-- Frequency bands visualization -->
+                        <text x="15" y="30" fill="#a0a0a0" font-size="9">High</text>
+                        <text x="15" y="75" fill="#a0a0a0" font-size="9">Mid</text>
+                        <text x="15" y="120" fill="#a0a0a0" font-size="9">Low</text>
+                        <!-- Spectrogram-like blocks before -->
+                        <rect x="40" y="20" width="30" height="20" fill="#1a1a4a" opacity="0.8"/>
+                        <rect x="40" y="45" width="30" height="40" fill="#2a2a8a" opacity="0.9"/>
+                        <rect x="40" y="90" width="30" height="40" fill="#4a4aca"/>
+                        <rect x="80" y="20" width="30" height="25" fill="#1a1a4a" opacity="0.7"/>
+                        <rect x="80" y="50" width="30" height="35" fill="#3a3aaa" opacity="0.9"/>
+                        <rect x="80" y="90" width="30" height="40" fill="#5a5ada"/>
+                        <rect x="120" y="25" width="30" height="20" fill="#2a2a6a" opacity="0.8"/>
+                        <rect x="120" y="50" width="30" height="35" fill="#3a3a9a"/>
+                        <rect x="120" y="90" width="30" height="40" fill="#4a4aba"/>
+                        <!-- Edit marker -->
+                        <line x1="170" y1="10" x2="170" y2="140" stroke="#ff6b35" stroke-width="3"/>
+                        <!-- Drastically different spectrum after -->
+                        <rect x="190" y="15" width="30" height="50" fill="#8a2a6a"/>
+                        <rect x="190" y="70" width="30" height="20" fill="#4a1a3a" opacity="0.6"/>
+                        <rect x="190" y="95" width="30" height="35" fill="#2a1a2a" opacity="0.4"/>
+                        <rect x="230" y="20" width="30" height="45" fill="#9a3a7a"/>
+                        <rect x="230" y="70" width="30" height="25" fill="#5a2a4a" opacity="0.7"/>
+                        <rect x="230" y="100" width="30" height="30" fill="#3a1a3a" opacity="0.5"/>
+                        <rect x="270" y="25" width="30" height="40" fill="#8a4a8a"/>
+                        <rect x="270" y="70" width="30" height="30" fill="#6a3a5a" opacity="0.6"/>
+                        <rect x="270" y="105" width="30" height="25" fill="#4a2a4a" opacity="0.4"/>
+                        <!-- Flux arrow -->
+                        <path d="M 170 75 L 185 65 L 185 70 L 195 70 L 195 80 L 185 80 L 185 85 Z" fill="#ff6b35"/>
+                        <text x="170" y="145" fill="#ff6b35" font-size="10" text-anchor="middle">Spectral Change</text>
+                    </svg>
+                `,
+                explanation: `
+                    <h4>How It Works</h4>
+                    <p>Spectral flux measures how much the frequency spectrum changes between consecutive audio frames. A sudden large change in spectral content can indicate an edit.</p>
+                    <h4>What It Detects</h4>
+                    <ul>
+                        <li>Abrupt tonal changes in the audio</li>
+                        <li>Splices between different instruments or voices</li>
+                        <li>Changes in recording equipment or environment</li>
+                    </ul>
+                    <h4>Reliability</h4>
+                    <p>Excellent for detecting edits between different audio sources with distinct frequency characteristics.</p>
+                `
+            },
+            'energy_discontinuity': {
+                title: 'Energy Discontinuity Detection',
+                diagram: `
+                    <svg width="400" height="150" viewBox="0 0 400 150">
+                        <rect width="400" height="150" fill="#0f0f0f" rx="8"/>
+                        <!-- dB scale -->
+                        <text x="15" y="25" fill="#a0a0a0" font-size="9">0dB</text>
+                        <text x="10" y="75" fill="#a0a0a0" font-size="9">-20</text>
+                        <text x="10" y="125" fill="#a0a0a0" font-size="9">-40</text>
+                        <!-- Grid lines -->
+                        <line x1="35" y1="20" x2="380" y2="20" stroke="#222" stroke-width="1"/>
+                        <line x1="35" y1="70" x2="380" y2="70" stroke="#222" stroke-width="1"/>
+                        <line x1="35" y1="120" x2="380" y2="120" stroke="#222" stroke-width="1"/>
+                        <!-- Energy envelope before (quieter) -->
+                        <path d="M 40 90 L 60 85 L 80 95 L 100 80 L 120 88 L 140 82 L 160 90"
+                              stroke="#00d4ff" stroke-width="2" fill="none"/>
+                        <!-- Edit marker -->
+                        <line x1="180" y1="10" x2="180" y2="140" stroke="#ff6b35" stroke-width="3"/>
+                        <!-- Energy envelope after (louder) -->
+                        <path d="M 200 40 L 220 35 L 240 45 L 260 30 L 280 42 L 300 38 L 320 50 L 340 35 L 360 45"
+                              stroke="#00ff88" stroke-width="2" fill="none"/>
+                        <!-- Jump indicator -->
+                        <path d="M 165 90 L 165 40 L 195 40" stroke="#ff6b35" stroke-width="2" fill="none" stroke-dasharray="4,2"/>
+                        <text x="150" y="65" fill="#ff6b35" font-size="10" transform="rotate(-90, 150, 65)">~15dB</text>
+                        <!-- Labels -->
+                        <text x="100" y="140" fill="#00d4ff" font-size="10" text-anchor="middle">Quiet</text>
+                        <text x="280" y="140" fill="#00ff88" font-size="10" text-anchor="middle">Loud</text>
+                    </svg>
+                `,
+                explanation: `
+                    <h4>How It Works</h4>
+                    <p>This method tracks the short-time energy (volume) of the audio in decibels. Sudden jumps in volume level that exceed natural dynamics often indicate an edit point.</p>
+                    <h4>What It Detects</h4>
+                    <ul>
+                        <li>Volume jumps at splice points</li>
+                        <li>Mismatched audio levels between takes</li>
+                        <li>Gain changes from different recording sessions</li>
+                    </ul>
+                    <h4>Reliability</h4>
+                    <p>Very effective for detecting amateur edits where volume matching wasn't performed.</p>
+                `
+            },
+            'phase_discontinuity': {
+                title: 'Phase Coherence Analysis',
+                diagram: `
+                    <svg width="400" height="150" viewBox="0 0 400 150">
+                        <rect width="400" height="150" fill="#0f0f0f" rx="8"/>
+                        <!-- Phase circle representation -->
+                        <circle cx="100" cy="75" r="45" stroke="#333" stroke-width="2" fill="none"/>
+                        <circle cx="100" cy="75" r="2" fill="#00d4ff"/>
+                        <!-- Coherent phase vectors -->
+                        <line x1="100" y1="75" x2="130" y2="50" stroke="#00ff88" stroke-width="2"/>
+                        <line x1="100" y1="75" x2="135" y2="60" stroke="#00ff88" stroke-width="2"/>
+                        <line x1="100" y1="75" x2="138" y2="72" stroke="#00ff88" stroke-width="2"/>
+                        <line x1="100" y1="75" x2="135" y2="85" stroke="#00ff88" stroke-width="2"/>
+                        <text x="100" y="135" fill="#00ff88" font-size="10" text-anchor="middle">Coherent</text>
+                        <!-- Arrow -->
+                        <path d="M 170 75 L 200 75 L 195 70 M 200 75 L 195 80" stroke="#ff6b35" stroke-width="2" fill="none"/>
+                        <text x="185" y="65" fill="#ff6b35" font-size="9" text-anchor="middle">Edit</text>
+                        <!-- Incoherent phase circle -->
+                        <circle cx="280" cy="75" r="45" stroke="#333" stroke-width="2" fill="none"/>
+                        <circle cx="280" cy="75" r="2" fill="#00d4ff"/>
+                        <!-- Random phase vectors -->
+                        <line x1="280" y1="75" x2="250" y2="50" stroke="#ff3366" stroke-width="2"/>
+                        <line x1="280" y1="75" x2="320" y2="55" stroke="#ff3366" stroke-width="2"/>
+                        <line x1="280" y1="75" x2="295" y2="115" stroke="#ff3366" stroke-width="2"/>
+                        <line x1="280" y1="75" x2="240" y2="90" stroke="#ff3366" stroke-width="2"/>
+                        <line x1="280" y1="75" x2="310" y2="100" stroke="#ff3366" stroke-width="2"/>
+                        <text x="280" y="135" fill="#ff3366" font-size="10" text-anchor="middle">Incoherent</text>
+                    </svg>
+                `,
+                explanation: `
+                    <h4>How It Works</h4>
+                    <p>Phase coherence measures how consistent the phase relationships are across frequency bands. Natural audio maintains predictable phase patterns, while spliced audio often has phase discontinuities.</p>
+                    <h4>What It Detects</h4>
+                    <ul>
+                        <li>Phase jumps at edit points</li>
+                        <li>Splices that break natural phase continuity</li>
+                        <li>Joins between independently recorded segments</li>
+                    </ul>
+                    <h4>Reliability</h4>
+                    <p>Advanced detection method that can catch edits invisible to other methods, especially in continuous tones.</p>
+                `
+            },
+            'noise_floor': {
+                title: 'Background Noise Analysis',
+                diagram: `
+                    <svg width="400" height="150" viewBox="0 0 400 150">
+                        <rect width="400" height="150" fill="#0f0f0f" rx="8"/>
+                        <!-- Noise floor visualization -->
+                        <!-- Room 1 noise pattern -->
+                        <rect x="30" y="100" width="140" height="35" fill="#1a3a2a" opacity="0.6"/>
+                        <path d="M 30 100 Q 45 98, 60 102 Q 75 97, 90 101 Q 105 99, 120 103 Q 135 98, 150 100 Q 165 102, 170 99"
+                              stroke="#00ff88" stroke-width="1.5" fill="none"/>
+                        <text x="100" y="125" fill="#00ff88" font-size="9" text-anchor="middle">Room A: -45dB noise</text>
+                        <!-- Edit marker -->
+                        <line x1="185" y1="10" x2="185" y2="140" stroke="#ff6b35" stroke-width="3"/>
+                        <!-- Room 2 different noise pattern -->
+                        <rect x="200" y="85" width="170" height="50" fill="#3a2a1a" opacity="0.6"/>
+                        <path d="M 200 85 Q 220 82, 240 88 Q 260 80, 280 86 Q 300 83, 320 90 Q 340 82, 360 87 Q 370 84, 370 86"
+                              stroke="#ffaa00" stroke-width="1.5" fill="none"/>
+                        <text x="285" y="120" fill="#ffaa00" font-size="9" text-anchor="middle">Room B: -38dB noise</text>
+                        <!-- Main signal on top -->
+                        <path d="M 30 60 Q 60 30, 90 55 Q 120 70, 150 45" stroke="#00d4ff" stroke-width="2" fill="none"/>
+                        <path d="M 200 50 Q 230 25, 260 45 Q 290 65, 320 40 Q 350 55, 370 35" stroke="#00d4ff" stroke-width="2" fill="none"/>
+                        <!-- Difference indicator -->
+                        <path d="M 185 100 L 185 85" stroke="#ff6b35" stroke-width="2"/>
+                        <text x="185" y="145" fill="#ff6b35" font-size="9" text-anchor="middle">7dB change</text>
+                    </svg>
+                `,
+                explanation: `
+                    <h4>How It Works</h4>
+                    <p>This method analyzes the background noise floor of the recording. Different recording environments have distinct noise characteristics (HVAC hum, room tone, etc.).</p>
+                    <h4>What It Detects</h4>
+                    <ul>
+                        <li>Splices between different recording locations</li>
+                        <li>Changes in ambient noise or room tone</li>
+                        <li>Edits where background sound doesn't match</li>
+                    </ul>
+                    <h4>Reliability</h4>
+                    <p>Highly effective for detecting edits between different recording sessions or locations.</p>
+                `
+            }
+        };
+
+        // Modal functionality
+        const methodModalOverlay = document.getElementById('method-modal-overlay');
+        const methodModalTitle = document.getElementById('method-modal-title');
+        const methodDiagram = document.getElementById('method-diagram');
+        const methodExplanation = document.getElementById('method-explanation');
+        const methodModalClose = document.getElementById('method-modal-close');
+
+        function showMethodExplanation(methodString) {
+            // Parse the method string (could be "combined(method1,method2)" or just "method")
+            let methods = [];
+            if (methodString.startsWith('combined(')) {
+                const inner = methodString.slice(9, -1);
+                methods = inner.split(',').map(m => m.trim());
+            } else {
+                methods = [methodString];
+            }
+
+            // Build content for all methods
+            let diagrams = '';
+            let explanations = '';
+            let tags = '<div style="margin-bottom: 16px;">';
+
+            methods.forEach(method => {
+                const info = detectionMethods[method];
+                if (info) {
+                    tags += `<span class="method-tag">${info.title.replace(' Detection', '').replace(' Analysis', '')}</span>`;
+                    diagrams += info.diagram;
+                    explanations += `<div style="margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--border);">${info.explanation}</div>`;
+                }
+            });
+
+            tags += '</div>';
+
+            if (methods.length > 1) {
+                methodModalTitle.textContent = `Multiple Detection Methods (${methods.length})`;
+            } else if (detectionMethods[methods[0]]) {
+                methodModalTitle.textContent = detectionMethods[methods[0]].title;
+            } else {
+                methodModalTitle.textContent = 'Detection Method';
+            }
+
+            methodDiagram.innerHTML = diagrams || '<p style="color: var(--text-secondary);">No diagram available</p>';
+            methodExplanation.innerHTML = tags + (explanations || '<p>No detailed explanation available for this detection method.</p>');
+
+            methodModalOverlay.classList.add('visible');
+        }
+
+        function hideMethodModal() {
+            methodModalOverlay.classList.remove('visible');
+        }
+
+        methodModalClose.addEventListener('click', hideMethodModal);
+        methodModalOverlay.addEventListener('click', (e) => {
+            if (e.target === methodModalOverlay) {
+                hideMethodModal();
+            }
+        });
+
+        // Close on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && methodModalOverlay.classList.contains('visible')) {
+                hideMethodModal();
             }
         });
     </script>
