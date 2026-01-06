@@ -296,10 +296,19 @@
             margin-bottom: 30px;
         }
 
+        .vis-controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+
         .vis-tabs {
             display: flex;
             gap: 10px;
-            margin-bottom: 20px;
+            margin-bottom: 0;
         }
 
         .vis-tab {
@@ -315,6 +324,32 @@
         .vis-tab.active {
             background: var(--accent);
             color: var(--bg-primary);
+        }
+
+        .vis-opacity-controls {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .vis-opacity-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .vis-opacity-group input[type="range"] {
+            width: 120px;
+        }
+
+        .vis-opacity-value {
+            min-width: 36px;
+            text-align: right;
+            color: var(--accent);
+            font-weight: 600;
         }
 
         .vis-content {
@@ -820,9 +855,23 @@
             </section>
 
             <div class="visualization-container">
-                <div class="vis-tabs">
-                    <button class="vis-tab active" data-panel="waveform">Waveform</button>
-                    <button class="vis-tab" data-panel="spectrogram">Spectrogram</button>
+                <div class="vis-controls">
+                    <div class="vis-tabs">
+                        <button class="vis-tab active" data-panel="waveform">Waveform</button>
+                        <button class="vis-tab" data-panel="spectrogram">Spectrogram</button>
+                    </div>
+                    <div class="vis-opacity-controls">
+                        <label class="vis-opacity-group">
+                            Waveform Opacity
+                            <input type="range" id="waveform-opacity" min="0.1" max="1" step="0.05" value="0.9">
+                            <span class="vis-opacity-value" id="waveform-opacity-value">0.90</span>
+                        </label>
+                        <label class="vis-opacity-group">
+                            Spectrogram Opacity
+                            <input type="range" id="spectrogram-opacity" min="0.1" max="1" step="0.05" value="0.85">
+                            <span class="vis-opacity-value" id="spectrogram-opacity-value">0.85</span>
+                        </label>
+                    </div>
                 </div>
                 <div class="vis-content">
                     <div class="vis-panel active" id="waveform-panel">
@@ -890,6 +939,10 @@
         const audioPlayer = document.getElementById('audio-player');
         const timeline = document.getElementById('timeline');
         const editPointsList = document.getElementById('edit-points-list');
+        const waveformOpacitySlider = document.getElementById('waveform-opacity');
+        const waveformOpacityValue = document.getElementById('waveform-opacity-value');
+        const spectrogramOpacitySlider = document.getElementById('spectrogram-opacity');
+        const spectrogramOpacityValue = document.getElementById('spectrogram-opacity-value');
 
         const methodPlotOrder = [
             'waveform_discontinuity',
@@ -908,6 +961,9 @@
             'phase_discontinuity': { line: '#ff3366' },
             'noise_floor': { line: '#ffaa00' }
         };
+
+        let waveformOpacity = 0.9;
+        let spectrogramOpacity = 0.85;
 
         // Initialize
         document.addEventListener('DOMContentLoaded', init);
@@ -946,6 +1002,25 @@
 
             sensitivitySlider.addEventListener('input', (e) => {
                 sensitivityValue.textContent = e.target.value;
+            });
+
+            waveformOpacitySlider.addEventListener('input', (e) => {
+                waveformOpacity = parseFloat(e.target.value);
+                waveformOpacityValue.textContent = waveformOpacity.toFixed(2);
+                if (analysisResults) {
+                    drawWaveform();
+                }
+            });
+
+            spectrogramOpacitySlider.addEventListener('input', (e) => {
+                spectrogramOpacity = parseFloat(e.target.value);
+                spectrogramOpacityValue.textContent = spectrogramOpacity.toFixed(2);
+                if (analysisResults) {
+                    const spectrogramPanel = document.getElementById('spectrogram-panel');
+                    if (spectrogramPanel.classList.contains('active')) {
+                        drawSpectrogram();
+                    }
+                }
             });
 
             analyzeBtn.addEventListener('click', analyzeAudio);
@@ -1165,6 +1240,8 @@
             ctx.fillRect(0, 0, width, height);
 
             // Draw center line
+            ctx.save();
+            ctx.globalAlpha = waveformOpacity;
             ctx.strokeStyle = '#333';
             ctx.lineWidth = 1;
             ctx.beginPath();
@@ -1190,6 +1267,7 @@
                 }
             }
             ctx.stroke();
+            ctx.restore();
 
             drawMethodOverlays(ctx, width, height);
 
@@ -1335,7 +1413,12 @@
 
             // Disable smoothing for crisp pixels
             ctx.imageSmoothingEnabled = false;
+            ctx.save();
+            ctx.globalAlpha = spectrogramOpacity;
             ctx.drawImage(offscreen, 0, 0, width, height);
+            ctx.restore();
+
+            drawMethodOverlays(ctx, width, height);
 
             // Draw edit point markers
             analysisResults.editPoints.forEach((ep, index) => {
