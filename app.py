@@ -5,14 +5,18 @@ Flask backend for audio edit detection.
 
 import os
 import uuid
-import json
 import tempfile
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
-import numpy as np
 
 from audio_analyzer import AudioForensicsAnalyzer, AnalysisResult
+
+# Configuration from environment
+DEBUG = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
+HOST = os.environ.get('HOST', '0.0.0.0')
+PORT = int(os.environ.get('PORT', 5001))
+MAX_CONTENT_MB = int(os.environ.get('MAX_CONTENT_MB', 100))
 
 app = Flask(__name__, static_folder='static', static_url_path='')
 CORS(app)
@@ -20,7 +24,7 @@ CORS(app)
 # Configuration
 UPLOAD_FOLDER = tempfile.mkdtemp()
 ALLOWED_EXTENSIONS = {'wav', 'mp3', 'flac', 'ogg', 'm4a', 'aac', 'wma', 'aiff'}
-MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 100MB max file size
+MAX_CONTENT_LENGTH = MAX_CONTENT_MB * 1024 * 1024
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
@@ -141,6 +145,7 @@ if __name__ == '__main__':
 
     print("Starting Audio Forensics Analyzer...")
     print(f"Upload folder: {UPLOAD_FOLDER}")
-    print("Server running at http://127.0.0.1:5001")
+    print(f"Server running at http://{HOST}:{PORT}")
+    print(f"Debug mode: {DEBUG}")
 
-    app.run(host='127.0.0.1', port=5001, debug=True)
+    app.run(host=HOST, port=PORT, debug=DEBUG)
