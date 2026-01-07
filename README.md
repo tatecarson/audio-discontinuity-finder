@@ -62,7 +62,7 @@ WAV, MP3, FLAC, OGG, M4A, AAC, WMA, AIFF
    python app.py
    ```
 
-2. Open your browser to `http://localhost:5000`
+2. Open your browser to `http://localhost:5001`
 
 3. Upload an audio file by:
    - Clicking "Choose File" button
@@ -130,6 +130,43 @@ Analyze an audio file for edit points.
 }
 ```
 
+## Deployment
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `5001` | Server port |
+| `HOST` | `0.0.0.0` | Server host |
+| `FLASK_DEBUG` | `false` | Enable debug mode |
+| `MAX_CONTENT_MB` | `100` | Max upload size in MB |
+
+### Docker
+
+```bash
+docker compose up --build
+```
+
+The app will be available at `http://localhost:8080`
+
+### Fly.io
+
+```bash
+fly launch --copy-config
+fly deploy
+```
+
+### Heroku / Railway / Render
+
+These platforms auto-detect the `Procfile`. Just connect your repo and deploy.
+
+### Manual Production
+
+```bash
+pip install -r requirements.txt
+gunicorn --bind 0.0.0.0:8080 --workers 2 --threads 4 --timeout 120 app:app
+```
+
 ## Technical Details
 
 - Built with Flask (Python) backend
@@ -137,6 +174,7 @@ Analyze an audio file for edit points.
 - NumPy and SciPy for signal processing
 - Pure JavaScript frontend (no frameworks)
 - Canvas-based visualizations
+- Gunicorn for production serving
 
 ## Limitations
 
