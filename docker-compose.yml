@@ -1,0 +1,19 @@
+services:
+  audio-forensics:
+    build: .
+    ports:
+      - "${PORT:-5001}:5001"
+    environment:
+      - PORT=5001
+      - HOST=0.0.0.0
+      - MAX_CONTENT_MB=${MAX_CONTENT_MB:-100}
+      - FLASK_DEBUG=${FLASK_DEBUG:-false}
+    volumes:
+      - ./static:/app/static:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
