@@ -1,46 +1,12 @@
-<<<<<<< HEAD
 fly.toml
 .git/
 __pycache__/
 .envrc
 .venv/
-=======
-# Git
-.git
-.gitignore
-
-# Python
-__pycache__
-*.py[cod]
-*$py.class
-*.so
-.Python
 venv/
-.venv/
-ENV/
-*.egg-info/
-.eggs/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-.claude/
-
-# Test files
-*.wav
-*.mp3
-*.flac
-*.ogg
-*.m4a
-*.aac
-
-# Misc
-.env
-.env.local
+*.py[cod]
 *.log
 .DS_Store
-Thumbs.db
-README.md
->>>>>>> df5c12e197fb86a8e8700abdcfdf5c7de66fd073
+.env
+.env.local
+.claude/

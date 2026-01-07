@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # fly.toml app configuration file generated for audio-discontinuity-finder on 2026-01-07T08:49:34-06:00
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
@@ -8,6 +7,11 @@ app = 'audio-discontinuity-finder'
 primary_region = 'ord'
 
 [build]
+
+[env]
+  PORT = "8080"
+  HOST = "0.0.0.0"
+  MAX_CONTENT_MB = "100"
 
 [http_service]
   internal_port = 8080
@@ -21,30 +25,6 @@ primary_region = 'ord'
   memory = '1gb'
   cpu_kind = 'shared'
   cpus = 1
-  memory_mb = 1024
-=======
-app = "audio-forensics-analyzer"
-primary_region = "sjc"
-
-[build]
-
-[env]
-  PORT = "8080"
-  HOST = "0.0.0.0"
-  MAX_CONTENT_MB = "100"
-
-[http_service]
-  internal_port = 8080
-  force_https = true
-  auto_stop_machines = "stop"
-  auto_start_machines = true
-  min_machines_running = 0
-  processes = ["app"]
-
-[[vm]]
-  memory = "1gb"
-  cpu_kind = "shared"
-  cpus = 1
 
 [checks]
   [checks.health]
@@ -53,4 +33,3 @@ primary_region = "sjc"
     interval = "30s"
     timeout = "5s"
     path = "/api/health"
->>>>>>> df5c12e197fb86a8e8700abdcfdf5c7de66fd073
